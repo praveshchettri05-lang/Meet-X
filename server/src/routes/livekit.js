@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { AccessToken } = require('@livekit/livekit-server-sdk');
+const { AccessToken } = require('livekit-server-sdk');
 const { PrismaClient } = require('@prisma/client');
 const { verifyFirebaseToken } = require('../middleware/auth');
 
