@@ -1,0 +1,58 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique
+  email       String   @unique
+  name        String
+  rollNumber  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hostedMeetings Meeting[]    @relation("HostedMeetings")
+  attendances    Attendance[]
+
+  @@map("users")
+}
+
+model Meeting {
+  id          String    @id @default(uuid())
+  roomCode    String    @unique
+  title       String?
+  hostId      String
+  host        User      @relation("HostedMeetings", fields: [hostId], references: [id])
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  livekitRoom String    @unique
+
+  attendances Attendance[]
+
+  @@map("meetings")
+}
+
+model Attendance {
+  id           String    @id @default(uuid())
+  meetingId    String
+  meeting      Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  joinedAt     DateTime
+  leftAt       DateTime?
+  totalSeconds Int       @default(0)
+  percentage   Float     @default(0)
+  pingsSent    Int       @default(0)  // how many times host pinged this person
+  pingsReacted Int       @default(0)  // how many times they reacted to pings
+
+  @@unique([meetingId, userId])
+  @@map("attendances")
+}

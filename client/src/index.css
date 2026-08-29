@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-google bg-white text-meet-dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  /* Primary button */
+  .btn-primary {
+    @apply bg-meet-blue text-white font-medium px-6 py-2.5 rounded-full
+           hover:bg-blue-700 transition-colors duration-150 disabled:opacity-50
+           disabled:cursor-not-allowed focus:outline-none focus:ring-2
+           focus:ring-meet-blue focus:ring-offset-2;
+  }
+
+  /* Secondary button */
+  .btn-secondary {
+    @apply bg-transparent text-meet-blue font-medium px-6 py-2.5 rounded-full
+           border border-meet-blue hover:bg-blue-50 transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-meet-blue focus:ring-offset-2;
+  }
+
+  /* Danger/red button */
+  .btn-danger {
+    @apply bg-meet-red text-white font-medium px-6 py-2.5 rounded-full
+           hover:bg-red-600 transition-colors duration-150 disabled:opacity-50;
+  }
+
+  /* Control button (circular, for mic/cam/etc) */
+  .btn-control {
+    @apply w-12 h-12 rounded-full flex items-center justify-center
+           transition-colors duration-150 focus:outline-none;
+  }
+
+  .btn-control-on {
+    @apply btn-control bg-meet-gray text-white hover:bg-gray-600;
+  }
+
+  .btn-control-off {
+    @apply btn-control bg-meet-red text-white hover:bg-red-600;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-white rounded-xl shadow-md p-6;
+  }
+
+  /* Input field */
+  .input-field {
+    @apply w-full border border-gray-300 rounded-lg px-4 py-3 text-sm
+           focus:outline-none focus:ring-2 focus:ring-meet-blue focus:border-transparent
+           placeholder-gray-400 transition-shadow;
+  }
+
+  /* Video tile */
+  .video-tile {
+    @apply relative bg-meet-dark rounded-xl overflow-hidden flex items-center justify-center;
+  }
+
+  /* Sidebar panel */
+  .sidebar-panel {
+    @apply bg-white border-l border-gray-200 flex flex-col h-full;
+  }
+
+  /* Attendance badge */
+  .badge-good    { @apply bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full; }
+  .badge-partial { @apply bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full; }
+  .badge-poor    { @apply bg-red-100 text-red-800 text-xs font-semibold px-2 py-1 rounded-full; }
+}
+
+/* LiveKit video overrides */
+.lk-video-conference {
+  background: #202124 !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Ping alert animation */
+@keyframes pingPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.ping-alert {
+  animation: pingPulse 0.5s ease-in-out 4;
+}
