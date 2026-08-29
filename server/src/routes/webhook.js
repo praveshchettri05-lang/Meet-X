@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WebhookReceiver } = require('@livekit/livekit-server-sdk');
+const { WebhookReceiver } = require('livekit-server-sdk');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
