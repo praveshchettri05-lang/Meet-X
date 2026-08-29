@@ -15,26 +15,46 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // ─── CORS ──────────────────────────────────────────────────────────────────
+// --- CORS ---
 const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:5173',
-  'https://meet-x.vercel.app', // update with your actual Vercel URL after deploy
-];
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'https://meet-x-two.vercel.app',
+  process.env.CLIENT_URL
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    if (!origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
     }
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ─── Socket.io ─────────────────────────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowedPatterns = [
+        /\.vercel\.app$/,
+        /\.netlify\.app$/,
+        /\.onrender\.com$/,
+        /^http:\/\/localhost/,
+      ];
+      if (
+        allowedOrigins.includes(origin) ||
+        allowedPatterns.some(p => p.test(origin))
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
