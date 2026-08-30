@@ -18,26 +18,26 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // ── Inner component that has access to LiveKit Room context ──────────────────
 function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMeeting }) {
-  const { localParticipant } = useLocalParticipant();
+  const {
+    localParticipant,
+    isMicrophoneEnabled,
+    isCameraEnabled,
+  } = useLocalParticipant();
 
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
   const [sidebarTab, setSidebarTab] = useState(null);
   const [socketParticipants, setSocketParticipants] = useState([]);
 
-  // Toggle microphone
+  // Toggle microphone — read real state from LiveKit, don't track separately
   const toggleMic = useCallback(async () => {
     if (!localParticipant) return;
-    await localParticipant.setMicrophoneEnabled(!micOn);
-    setMicOn(prev => !prev);
-  }, [localParticipant, micOn]);
+    await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+  }, [localParticipant, isMicrophoneEnabled]);
 
-  // Toggle camera
+  // Toggle camera — read real state from LiveKit, don't track separately
   const toggleCam = useCallback(async () => {
     if (!localParticipant) return;
-    await localParticipant.setCameraEnabled(!camOn);
-    setCamOn(prev => !prev);
-  }, [localParticipant, camOn]);
+    await localParticipant.setCameraEnabled(!isCameraEnabled);
+  }, [localParticipant, isCameraEnabled]);
 
   // Connect Socket.io
   useEffect(() => {
@@ -107,14 +107,14 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
           {/* Microphone toggle */}
           <button
             onClick={toggleMic}
-            title={micOn ? 'Mute microphone' : 'Unmute microphone'}
-            className={`flex flex-col items-center justify-center w-10 h-10 rounded-full transition-all ${
-              micOn
+            title={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
+            className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+              isMicrophoneEnabled
                 ? 'bg-gray-700 hover:bg-gray-600 text-white'
                 : 'bg-red-600 hover:bg-red-500 text-white'
             }`}
           >
-            {micOn ? (
+            {isMicrophoneEnabled ? (
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/>
               </svg>
@@ -128,14 +128,14 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
           {/* Camera toggle */}
           <button
             onClick={toggleCam}
-            title={camOn ? 'Turn off camera' : 'Turn on camera'}
-            className={`flex flex-col items-center justify-center w-10 h-10 rounded-full transition-all ${
-              camOn
+            title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+            className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+              isCameraEnabled
                 ? 'bg-gray-700 hover:bg-gray-600 text-white'
                 : 'bg-red-600 hover:bg-red-500 text-white'
             }`}
           >
-            {camOn ? (
+            {isCameraEnabled ? (
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
               </svg>
