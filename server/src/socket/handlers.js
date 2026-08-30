@@ -3,7 +3,7 @@ const prisma = new PrismaClient();
 
 /**
  * In-memory map of socket IDs to user/meeting info.
- * { socketId → { userId, meetingId, roomCode, isHost } }
+ * { socketId → { userId, meetingId, roomCode, isHost, joinedAt } }
  */
 const socketUserMap = new Map();
 
@@ -14,6 +14,67 @@ const socketUserMap = new Map();
 const pendingPings = new Map();
 
 /**
+ * Records attendance join event in DB via Socket.io.
+ * This is the PRIMARY attendance mechanism (webhook is optional backup).
+ */
+async function recordJoin(userId, meetingId) {
+  try {
+    await prisma.attendance.upsert({
+      where: { meetingId_userId: { meetingId, userId } },
+      create: {
+        meetingId,
+        userId,
+        joinedAt: new Date(),
+        totalSeconds: 0,
+        percentage: 0,
+      },
+      update: {
+        // If reconnecting, reset left time
+        leftAt: null,
+      },
+    });
+    console.log(`✅ Attendance JOIN recorded: userId=${userId} meetingId=${meetingId}`);
+  } catch (err) {
+    console.error('recordJoin error:', err);
+  }
+}
+
+/**
+ * Records attendance leave event in DB via Socket.io.
+ */
+async function recordLeave(userId, meetingId, roomCode) {
+  try {
+    const att = await prisma.attendance.findUnique({
+      where: { meetingId_userId: { meetingId, userId } },
+    });
+    if (!att) return;
+
+    const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+    if (!meeting) return;
+
+    const now = new Date();
+    const totalSecs = Math.max(0, Math.floor((now - att.joinedAt) / 1000));
+
+    // Use actual meeting duration if ended, otherwise now
+    const meetingEndTime = meeting.endedAt || now;
+    const meetingDurationSecs = Math.max(1, Math.floor((meetingEndTime - meeting.startedAt) / 1000));
+    const pct = Math.min(100, Math.round((totalSecs / meetingDurationSecs) * 100));
+
+    await prisma.attendance.update({
+      where: { id: att.id },
+      data: {
+        leftAt: now,
+        totalSeconds: totalSecs,
+        percentage: pct,
+      },
+    });
+    console.log(`📤 Attendance LEAVE recorded: userId=${userId} ${pct}% (${totalSecs}s)`);
+  } catch (err) {
+    console.error('recordLeave error:', err);
+  }
+}
+
+/**
  * Registers all Socket.io event handlers.
  * @param {import('socket.io').Server} io
  */
@@ -22,33 +83,35 @@ function registerSocketHandlers(io) {
     console.log(`🔌 Socket connected: ${socket.id}`);
 
     // ─── JOIN MEETING ROOM ──────────────────────────────────────────────────
-    /**
-     * Client emits this after connecting to LiveKit.
-     * We track the socket for attentiveness pings.
-     * Payload: { userId, roomCode, isHost }
-     */
     socket.on('meeting:join', async ({ userId, roomCode, isHost }) => {
       try {
         const meeting = await prisma.meeting.findUnique({ where: { roomCode } });
-        if (!meeting) return;
+        if (!meeting) {
+          console.warn(`meeting:join — room not found: ${roomCode}`);
+          return;
+        }
 
-        socket.join(roomCode); // Join the Socket.io room
+        socket.join(roomCode);
 
         socketUserMap.set(socket.id, {
           userId,
           meetingId: meeting.id,
           roomCode,
           isHost: isHost || false,
+          joinedAt: Date.now(),
         });
 
-        // Notify others in the room about the new participant
+        // ── Record attendance JOIN in DB ──────────────────────────────────
+        await recordJoin(userId, meeting.id);
+
+        // Notify others in the room
         socket.to(roomCode).emit('participant:joined', {
           socketId: socket.id,
           userId,
           isHost,
         });
 
-        // Send this socket the list of current participants in room
+        // Send current participants list to this socket
         const roomSockets = await io.in(roomCode).fetchSockets();
         const participants = roomSockets
           .filter(s => s.id !== socket.id)
@@ -66,10 +129,6 @@ function registerSocketHandlers(io) {
     });
 
     // ─── ATTENTIVENESS PING ─────────────────────────────────────────────────
-    /**
-     * Host sends a ping to a specific participant.
-     * Payload: { targetUserId, roomCode, pingId }
-     */
     socket.on('ping:send', async ({ targetUserId, roomCode, pingId }) => {
       try {
         const senderInfo = socketUserMap.get(socket.id);
@@ -78,7 +137,6 @@ function registerSocketHandlers(io) {
           return;
         }
 
-        // Find target's socket ID
         const roomSockets = await io.in(roomCode).fetchSockets();
         const targetSocket = roomSockets.find(s => {
           const info = socketUserMap.get(s.id);
@@ -90,7 +148,6 @@ function registerSocketHandlers(io) {
           return;
         }
 
-        // Record the ping
         pendingPings.set(pingId, {
           hostSocketId: socket.id,
           targetSocketId: targetSocket.id,
@@ -100,7 +157,6 @@ function registerSocketHandlers(io) {
           reacted: false,
         });
 
-        // Send ping to target participant
         targetSocket.emit('ping:receive', {
           pingId,
           from: 'Host',
@@ -136,10 +192,6 @@ function registerSocketHandlers(io) {
       }
     });
 
-    /**
-     * Target participant reacts to a ping.
-     * Payload: { pingId }
-     */
     socket.on('ping:react', async ({ pingId }) => {
       try {
         const ping = pendingPings.get(pingId);
@@ -148,7 +200,6 @@ function registerSocketHandlers(io) {
         ping.reacted = true;
         pendingPings.delete(pingId);
 
-        // Notify host
         const hostSocket = io.sockets.sockets.get(ping.hostSocketId);
         if (hostSocket) {
           hostSocket.emit('ping:result', {
@@ -159,7 +210,6 @@ function registerSocketHandlers(io) {
           });
         }
 
-        // Update reaction count in DB
         const meeting = await prisma.meeting.findUnique({ where: { roomCode: ping.roomCode } });
         if (meeting) {
           await prisma.attendance.updateMany({
@@ -175,10 +225,6 @@ function registerSocketHandlers(io) {
     });
 
     // ─── CHAT MESSAGES ──────────────────────────────────────────────────────
-    /**
-     * Relay chat messages to all room participants.
-     * Payload: { roomCode, message, senderName, timestamp }
-     */
     socket.on('chat:message', ({ roomCode, message, senderName, timestamp }) => {
       io.to(roomCode).emit('chat:message', {
         socketId: socket.id,
@@ -193,7 +239,7 @@ function registerSocketHandlers(io) {
       const info = socketUserMap.get(socket.id);
 
       if (info) {
-        const { roomCode, userId } = info;
+        const { roomCode, userId, meetingId } = info;
 
         // Notify others
         socket.to(roomCode).emit('participant:left', {
@@ -201,8 +247,11 @@ function registerSocketHandlers(io) {
           userId,
         });
 
+        // ── Record attendance LEAVE in DB ─────────────────────────────────
+        await recordLeave(userId, meetingId, roomCode);
+
         socketUserMap.delete(socket.id);
-        console.log(`❌ Socket disconnected: ${socket.id} (${userId})`);
+        console.log(`❌ Socket disconnected: ${socket.id} (userId=${userId})`);
       }
     });
   });
