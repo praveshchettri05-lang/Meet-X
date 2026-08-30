@@ -95,10 +95,14 @@ export default function PingAlert() {
             </button>
             <div className="mt-4 bg-gray-100 rounded-full h-1.5 overflow-hidden">
               <div
-                className="h-full bg-meet-yellow transition-all duration-[10000ms] ease-linear"
-                style={{ width: reacted ? '0%' : '0%', animation: 'none' }}
+                className="h-full bg-meet-yellow rounded-full"
+                style={{
+                  width: '100%',
+                  animation: 'shrink-bar 10s linear forwards',
+                }}
               />
             </div>
+            <style>{`@keyframes shrink-bar { from { width: 100% } to { width: 0% } }`}</style>
             <p className="text-xs text-gray-400 mt-2">This alert will close in ~10 seconds</p>
           </>
         )}

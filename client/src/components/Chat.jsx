@@ -6,20 +6,29 @@ import { getSocket } from '../lib/socket';
  *
  * @param {string} roomCode
  * @param {string} senderName - Current user's display name
+ * @param {string} currentUserId - Current user's DB id (to identify own messages)
  */
-export default function Chat({ roomCode, senderName }) {
+export default function Chat({ roomCode, senderName, currentUserId }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [mySocketId, setMySocketId] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
     const socket = getSocket();
 
+    // Store our own socket ID so we can identify our own messages
+    setMySocketId(socket.id);
+    socket.on('connect', () => setMySocketId(socket.id));
+
     socket.on('chat:message', (msg) => {
       setMessages(prev => [...prev, msg]);
     });
 
-    return () => socket.off('chat:message');
+    return () => {
+      socket.off('chat:message');
+      socket.off('connect');
+    };
   }, []);
 
   // Auto-scroll to latest message
@@ -64,7 +73,11 @@ export default function Chat({ roomCode, senderName }) {
           </div>
         ) : (
           messages.map((msg, i) => {
-            const isMe = msg.senderName === senderName;
+            // Identify own messages by socket ID (reliable), fall back to name
+            const isMe = mySocketId
+              ? msg.socketId === mySocketId
+              : msg.senderName === senderName;
+
             return (
               <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                 {!isMe && (

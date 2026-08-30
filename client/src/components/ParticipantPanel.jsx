@@ -73,7 +73,7 @@ export default function ParticipantPanel({ isHost, roomCode, participants, curre
 
               return (
                 <li
-                  key={p.userId}
+                  key={p.userId || p.socketId}
                   className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   {/* Avatar */}
