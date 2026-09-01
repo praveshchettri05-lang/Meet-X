@@ -83,7 +83,7 @@ function registerSocketHandlers(io) {
     console.log(`🔌 Socket connected: ${socket.id}`);
 
     // ─── JOIN MEETING ROOM ──────────────────────────────────────────────────
-    socket.on('meeting:join', async ({ userId, roomCode, isHost }) => {
+    socket.on('meeting:join', async ({ userId, roomCode, isHost, name }) => {
       try {
         const meeting = await prisma.meeting.findUnique({ where: { roomCode } });
         if (!meeting) {
@@ -95,6 +95,7 @@ function registerSocketHandlers(io) {
 
         socketUserMap.set(socket.id, {
           userId,
+          name: name || 'Unknown',
           meetingId: meeting.id,
           roomCode,
           isHost: isHost || false,
@@ -108,6 +109,7 @@ function registerSocketHandlers(io) {
         socket.to(roomCode).emit('participant:joined', {
           socketId: socket.id,
           userId,
+          name: name || 'Unknown',
           isHost,
         });
 
@@ -122,7 +124,7 @@ function registerSocketHandlers(io) {
           .filter(p => p.userId);
 
         socket.emit('participants:list', participants);
-        console.log(`👤 ${userId} joined room ${roomCode} (${isHost ? 'HOST' : 'participant'})`);
+        console.log(`👤 ${userId} (${name}) joined room ${roomCode} (${isHost ? 'HOST' : 'participant'})`);
       } catch (err) {
         console.error('meeting:join error:', err);
       }
@@ -157,9 +159,10 @@ function registerSocketHandlers(io) {
           reacted: false,
         });
 
+        const senderName = senderInfo.name || 'Host';
         targetSocket.emit('ping:receive', {
           pingId,
-          from: 'Host',
+          from: senderName,
           sentAt: Date.now(),
         });
 
@@ -225,12 +228,17 @@ function registerSocketHandlers(io) {
     });
 
     // ─── CHAT MESSAGES ──────────────────────────────────────────────────────
-    socket.on('chat:message', ({ roomCode, message, senderName, timestamp }) => {
-      io.to(roomCode).emit('chat:message', {
+    // FIX: Forward clientMsgId back so the sender can deduplicate their own echo.
+    //      Use socket.to() (excludes sender) so the sender doesn't receive their
+    //      own message via the socket — the client already adds it optimistically.
+    socket.on('chat:message', ({ roomCode, message, senderName, timestamp, clientMsgId }) => {
+      // Broadcast to everyone EXCEPT the sender so there's no duplicate on the sender's side.
+      socket.to(roomCode).emit('chat:message', {
         socketId: socket.id,
         senderName,
         message,
         timestamp: timestamp || Date.now(),
+        clientMsgId, // preserve so receiver can deduplicate if needed
       });
     });
 
