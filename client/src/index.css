@@ -150,3 +150,10 @@
   height: 100% !important;
   object-fit: cover !important;
 }
+
+/* Ensure screen shares are contained so they don't get cropped */
+.screen-share-tile video,
+[data-lk-source="screen_share"] video {
+  object-fit: contain !important;
+  background-color: #000;
+}

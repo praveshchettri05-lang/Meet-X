@@ -63,7 +63,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
                 style={{ width: '150px', height: '96px' }}
                 onClick={() => onPinToggle(id)}
               >
-                <ParticipantTile trackRef={t} className="w-full h-full" />
+                <ParticipantTile trackRef={t} className={`w-full h-full ${t.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`} />
                 {isPin && (
                   <div className="absolute top-1 right-1 bg-blue-500 rounded-full p-0.5">
                     <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -84,8 +84,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
       <div className="flex-1 min-h-0 p-2 overflow-hidden">
         {mainTrack ? (
-          <div className="w-full h-full rounded-2xl overflow-hidden relative">
-            <ParticipantTile trackRef={mainTrack} className="w-full h-full" />
+          <div className="w-full h-full rounded-2xl overflow-hidden relative bg-black">
+            <ParticipantTile trackRef={mainTrack} className={`w-full h-full ${mainTrack.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`} />
             {pinnedTrack && (
               <button
                 onClick={() => onPinToggle(null)}
