@@ -65,9 +65,9 @@
     @apply relative bg-meet-dark rounded-xl overflow-hidden flex items-center justify-center;
   }
 
-  /* Sidebar panel */
+  /* Sidebar panel — base (used in both light and dark contexts) */
   .sidebar-panel {
-    @apply bg-white border-l border-gray-200 flex flex-col h-full;
+    @apply flex flex-col h-full;
   }
 
   /* Attendance badge */
@@ -104,4 +104,49 @@
 
 .ping-alert {
   animation: pingPulse 0.5s ease-in-out 4;
+}
+
+/* Sidebar slide-in animation */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.sidebar-slide-in {
+  animation: slideInRight 0.2s ease-out forwards;
+}
+
+/* Video grid custom scrollbar (dark track) */
+.lk-video-conference,
+[data-lk-theme] {
+  --lk-bg: #202124 !important;
+}
+
+/* Thumbnail strip scrollbar */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 4px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
+}
+
+/* Hide LiveKit built-in participant name bar on all tiles */
+.lk-participant-name,
+.lk-participant-metadata,
+[class*="participantName"],
+[class*="participant-name"],
+.lk-tile-metadata {
+  display: none !important;
+}
+
+/* Make video tiles fill their container with object-fit: cover for normal cameras */
+.lk-participant-tile video,
+.lk-video-tile video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
 }

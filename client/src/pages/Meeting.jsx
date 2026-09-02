@@ -25,7 +25,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 //   [main large video]
 //   [bottom control bar]
 // ─────────────────────────────────────────────────────────────────────────────
-﻿function VideoLayout({ pinnedIdentity, onPinToggle }) {
+﻿function VideoLayout({ pinnedTrackId, onPinToggle }) {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera,      withPlaceholder: true  },
@@ -34,11 +34,15 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     { onlySubscribed: false }
   );
 
-  const pinnedTrack = pinnedIdentity
-    ? tracks.find(t => t.participant?.identity === pinnedIdentity)
+  const getTrackId = (t) => `${t.participant?.identity}-${t.source}`;
+
+  const pinnedTrack = pinnedTrackId
+    ? tracks.find(t => getTrackId(t) === pinnedTrackId)
     : null;
 
-  const mainTrack   = pinnedTrack ?? tracks[0] ?? null;
+  // If there's a screen share, default to showing it if nothing is pinned
+  const defaultMainTrack = tracks.find(t => t.source === Track.Source.ScreenShare) ?? tracks[0] ?? null;
+  const mainTrack = pinnedTrack ?? defaultMainTrack;
   const stripTracks = tracks.filter(t => t !== mainTrack);
 
   return (
@@ -50,14 +54,14 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
           style={{ height: '120px' }}
         >
           {stripTracks.map(t => {
-            const id    = `${t.participant?.identity}-${t.source}`;
-            const isPin = t.participant?.identity === pinnedIdentity;
+            const id    = getTrackId(t);
+            const isPin = id === pinnedTrackId;
             return (
               <div
                 key={id}
                 className={`relative flex-shrink-0 rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${isPin ? 'border-blue-500' : 'border-transparent hover:border-gray-500'}`}
                 style={{ width: '150px', height: '96px' }}
-                onClick={() => onPinToggle(t.participant?.identity)}
+                onClick={() => onPinToggle(id)}
               >
                 <ParticipantTile trackRef={t} className="w-full h-full" />
                 {isPin && (
@@ -65,6 +69,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
                     <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                     </svg>
+                  </div>
+                )}
+                {t.source === Track.Source.ScreenShare && (
+                  <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                    Screen
                   </div>
                 )}
               </div>
@@ -100,7 +109,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 }
 
 function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMeeting }) {
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
 
   const [sidebarTab,       setSidebarTab]       = useState(null);
   const [socketParticipants, setSocketParticipants] = useState([]);
@@ -150,6 +159,12 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
     try { await localParticipant.setCameraEnabled(!isCameraEnabled); }
     catch (err) { console.error('Camera toggle error:', err); }
   }, [localParticipant, isCameraEnabled]);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (!localParticipant) return;
+    try { await localParticipant.setScreenShareEnabled(!isScreenShareEnabled); }
+    catch (err) { console.error('Screen share toggle error:', err); }
+  }, [localParticipant, isScreenShareEnabled]);
 
   // ── Fullscreen ───────────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(() => {
@@ -209,35 +224,29 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
   }, [sidebarTab]);
 
   // ── Pin toggle ───────────────────────────────────────────────────────────
-  // Called from thumbnail strip (identity string) or from ParticipantPanel (userId)
-  function handlePinByIdentity(identity) {
-    if (!identity) {
-      // Explicit unpin (from "Unpin" button overlay)
+  // Called from thumbnail strip (trackId) or from ParticipantPanel (userId)
+  function handlePinByTrackId(trackId) {
+    if (!trackId) {
+      // Explicit unpin
       setPinnedIdentity(null);
       setPinnedUserId(null);
       return;
     }
     setPinnedIdentity(prev => {
-      if (prev === identity) {
-        // Already pinned — toggle off
+      if (prev === trackId) {
         setPinnedUserId(null);
         return null;
       }
-      // Pin new identity; sync pinnedUserId using latest ref data
-      const selfEntry = { userId: dbUser?.id };
-      const allP = [
-        selfEntry,
-        ...socketParticipantsRef.current,
-      ];
-      const found = allP.find(p => p.userId === identity || p.socketId === identity);
-      setPinnedUserId(found?.userId ?? identity);
-      return identity;
+      // Extract userId from trackId (which is "userId-source")
+      const extractedUserId = trackId.split('-')[0];
+      setPinnedUserId(extractedUserId);
+      return trackId;
     });
   }
 
   function handlePinByUserId(userId) {
-    // In our setup, LiveKit identity === userId (set in livekit.js token generation)
-    handlePinByIdentity(userId);
+    // If pinned from sidebar, pin their camera track by default
+    handlePinByTrackId(`${userId}-camera`);
   }
 
 
@@ -313,8 +322,8 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
         {/* Video layout */}
         <div className="flex-1 min-w-0 overflow-hidden">
           <VideoLayout
-            pinnedIdentity={pinnedIdentity}
-            onPinToggle={handlePinByIdentity}
+            pinnedTrackId={pinnedIdentity}
+            onPinToggle={handlePinByTrackId}
           />
         </div>
 
@@ -399,6 +408,23 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
           )}
         </ControlBtn>
 
+        {/* Screen Share */}
+        <ControlBtn
+          onClick={toggleScreenShare}
+          active={isScreenShareEnabled}
+          title={isScreenShareEnabled ? 'Stop presenting' : 'Present now'}
+        >
+          {isScreenShareEnabled ? (
+            <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 16H3V5h18v14zm-4-4l-4-4v3H7v2h6v3l4-4z"/>
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 16H3V5h18v14zm-9-9.11V7l4 4-4 4v-2.89H7v-2.22h5z"/>
+            </svg>
+          )}
+        </ControlBtn>
+
         <div className="w-px h-8 bg-gray-700 mx-1" />
 
         {/* People */}
@@ -475,6 +501,8 @@ function ControlBtn({ onClick, active, danger, title, children }) {
       className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-150 ${
         danger
           ? 'bg-red-600 hover:bg-red-500 text-white'
+          : active
+          ? 'bg-blue-600 hover:bg-blue-500 text-white'
           : 'bg-gray-700 hover:bg-gray-600 text-white'
       }`}
     >

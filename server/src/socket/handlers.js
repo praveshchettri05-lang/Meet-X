@@ -29,8 +29,9 @@ async function recordJoin(userId, meetingId) {
         percentage: 0,
       },
       update: {
-        // If reconnecting, reset left time
+        // If reconnecting, reset left time and update joinedAt
         leftAt: null,
+        joinedAt: new Date(),
       },
     });
     console.log(`✅ Attendance JOIN recorded: userId=${userId} meetingId=${meetingId}`);
@@ -47,24 +48,25 @@ async function recordLeave(userId, meetingId, roomCode) {
     const att = await prisma.attendance.findUnique({
       where: { meetingId_userId: { meetingId, userId } },
     });
-    if (!att) return;
+    if (!att || att.leftAt) return; // Prevent double counting if already left
 
     const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
     if (!meeting) return;
 
     const now = new Date();
-    const totalSecs = Math.max(0, Math.floor((now - att.joinedAt) / 1000));
+    const sessionSecs = Math.max(0, Math.floor((now - att.joinedAt) / 1000));
+    const newTotalSecs = att.totalSeconds + sessionSecs;
 
     // Use actual meeting duration if ended, otherwise now
     const meetingEndTime = meeting.endedAt || now;
     const meetingDurationSecs = Math.max(1, Math.floor((meetingEndTime - meeting.startedAt) / 1000));
-    const pct = Math.min(100, Math.round((totalSecs / meetingDurationSecs) * 100));
+    const pct = Math.min(100, Math.round((newTotalSecs / meetingDurationSecs) * 100));
 
     await prisma.attendance.update({
       where: { id: att.id },
       data: {
         leftAt: now,
-        totalSeconds: totalSecs,
+        totalSeconds: newTotalSecs,
         percentage: pct,
       },
     });

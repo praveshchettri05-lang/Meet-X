@@ -3,7 +3,7 @@ import { playTone } from '../utils/tone';
 import { getSocket } from '../lib/socket';
 
 /**
- * Component shown to a participant when the host sends an attentiveness ping.
+ * Shown to ANY participant (including host) when they receive a ping.
  * Plays a tone, shows a visible banner, and registers a reaction on any user input.
  */
 export default function PingAlert() {
@@ -75,7 +75,7 @@ export default function PingAlert() {
           <>
             <div className="text-5xl mb-3">✅</div>
             <h2 className="text-xl font-bold text-meet-green mb-2">Great! You reacted.</h2>
-            <p className="text-meet-gray text-sm">Your host has been notified.</p>
+            <p className="text-meet-gray text-sm">Your response has been noted.</p>
           </>
         ) : (
           <>

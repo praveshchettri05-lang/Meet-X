@@ -75,6 +75,7 @@ async function handleParticipantJoined(event) {
     },
     update: {
       leftAt: null, // Reset if reconnecting
+      joinedAt: new Date(), // Update join time to calculate current session duration correctly
     },
   });
 
@@ -95,17 +96,19 @@ async function handleParticipantLeft(event) {
     },
   });
 
-  if (!attendance) return;
+  if (!attendance || attendance.leftAt) return; // Prevent double counting
 
   const now = new Date();
-  const totalSecs = Math.floor((now - attendance.joinedAt) / 1000);
+  const sessionSecs = Math.max(0, Math.floor((now - attendance.joinedAt) / 1000));
+  const newTotalSecs = attendance.totalSeconds + sessionSecs;
+  
   const meetingEndTime = meeting.endedAt || now;
   const meetingDurationSecs = Math.max(1, Math.floor((meetingEndTime - meeting.startedAt) / 1000));
-  const pct = Math.min(100, Math.round((totalSecs / meetingDurationSecs) * 100));
+  const pct = Math.min(100, Math.round((newTotalSecs / meetingDurationSecs) * 100));
 
   await prisma.attendance.update({
     where: { id: attendance.id },
-    data: { leftAt: now, totalSeconds: totalSecs, percentage: pct },
+    data: { leftAt: now, totalSeconds: newTotalSecs, percentage: pct },
   });
 
   console.log(`📤 Attendance updated: ${participantIdentity} left ${meeting.roomCode} (${pct}%)`);

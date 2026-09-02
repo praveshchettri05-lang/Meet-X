@@ -11,6 +11,11 @@ export function getSocket() {
       autoConnect: false,        // Connect manually after auth
       withCredentials: true,
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socket.on('connect', () => {
@@ -36,7 +41,8 @@ export function connectSocket() {
 }
 
 export function disconnectSocket() {
-  if (socket?.connected) {
+  if (socket) {
     socket.disconnect();
+    socket = null; // Allow re-creation on next meeting join
   }
 }
