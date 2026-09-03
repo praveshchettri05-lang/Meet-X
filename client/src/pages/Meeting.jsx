@@ -25,7 +25,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 //   [main large video]
 //   [bottom control bar]
 // ─────────────────────────────────────────────────────────────────────────────
-﻿function VideoLayout({ pinnedTrackId, onPinToggle }) {
+function VideoLayout({ pinnedTrackId, onPinToggle, onStopScreenShare }) {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera,      withPlaceholder: true  },
@@ -34,16 +34,29 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     { onlySubscribed: false }
   );
 
+  const [showLocalPreview, setShowLocalPreview] = useState(false);
+
   const getTrackId = (t) => `${t.participant?.identity}-${t.source}`;
 
   const pinnedTrack = pinnedTrackId
     ? tracks.find(t => getTrackId(t) === pinnedTrackId)
     : null;
 
-  // If there's a screen share, default to showing it if nothing is pinned
-  const defaultMainTrack = tracks.find(t => t.source === Track.Source.ScreenShare) ?? tracks[0] ?? null;
+  // Remote screen shares take priority for main view; then local screen share, then first track
+  const remoteScreenTrack = tracks.find(t => t.source === Track.Source.ScreenShare && !t.participant?.isLocal);
+  const localScreenTrack = tracks.find(t => t.source === Track.Source.ScreenShare && t.participant?.isLocal);
+  const defaultMainTrack = remoteScreenTrack ?? localScreenTrack ?? tracks[0] ?? null;
   const mainTrack = pinnedTrack ?? defaultMainTrack;
   const stripTracks = tracks.filter(t => t !== mainTrack);
+
+  const isLocalScreenMain = mainTrack?.source === Track.Source.ScreenShare && mainTrack?.participant?.isLocal;
+
+  // Reset preview mode if local screen sharing stops
+  useEffect(() => {
+    if (!localScreenTrack) {
+      setShowLocalPreview(false);
+    }
+  }, [localScreenTrack]);
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e]">
@@ -54,8 +67,10 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
           style={{ height: '120px' }}
         >
           {stripTracks.map(t => {
-            const id    = getTrackId(t);
+            const id = getTrackId(t);
             const isPin = id === pinnedTrackId;
+            const isLocalScreen = t.source === Track.Source.ScreenShare && t.participant?.isLocal;
+
             return (
               <div
                 key={id}
@@ -63,16 +78,27 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
                 style={{ width: '150px', height: '96px' }}
                 onClick={() => onPinToggle(id)}
               >
-                <ParticipantTile trackRef={t} className={`w-full h-full ${t.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`} />
+                {isLocalScreen ? (
+                  <div className="w-full h-full bg-[#181818] border border-gray-800 flex flex-col items-center justify-center p-2 text-center select-none">
+                    <svg className="w-6 h-6 text-blue-400 mb-1" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                    </svg>
+                    <span className="text-[11px] text-gray-300 font-medium truncate w-full">Your Screen</span>
+                    <span className="text-[9px] text-blue-400">Presenting</span>
+                  </div>
+                ) : (
+                  <ParticipantTile trackRef={t} className={`w-full h-full ${t.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`} />
+                )}
+
                 {isPin && (
-                  <div className="absolute top-1 right-1 bg-blue-500 rounded-full p-0.5">
+                  <div className="absolute top-1 right-1 bg-blue-500 rounded-full p-0.5 z-10">
                     <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                     </svg>
                   </div>
                 )}
-                {t.source === Track.Source.ScreenShare && (
-                  <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                {t.source === Track.Source.ScreenShare && !isLocalScreen && (
+                  <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded z-10">
                     Screen
                   </div>
                 )}
@@ -85,11 +111,74 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       <div className="flex-1 min-h-0 p-2 overflow-hidden">
         {mainTrack ? (
           <div className="w-full h-full rounded-2xl overflow-hidden relative bg-black">
-            <ParticipantTile trackRef={mainTrack} className={`w-full h-full ${mainTrack.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`} />
+            {isLocalScreenMain && !showLocalPreview ? (
+              <div className="w-full h-full bg-[#121212] border border-gray-800 rounded-2xl flex flex-col items-center justify-center p-6 text-center select-none relative overflow-hidden">
+                {/* Subtle ambient glow */}
+                <div className="absolute w-80 h-80 rounded-full bg-blue-600/10 blur-3xl pointer-events-none" />
+
+                <div className="relative z-10 flex flex-col items-center max-w-md">
+                  <div className="w-20 h-20 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 mb-5 shadow-lg shadow-blue-500/10">
+                    <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                    </svg>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+                    You are presenting to everyone
+                  </h3>
+                  <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                    Your screen is being broadcast to all participants in this meeting.
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      onClick={onStopScreenShare}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                      </svg>
+                      Stop presenting
+                    </button>
+
+                    <button
+                      onClick={() => setShowLocalPreview(true)}
+                      className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm px-4 py-2.5 rounded-full border border-gray-700 transition-colors cursor-pointer"
+                      title="View live preview (may cause mirror effect if sharing this window)"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Preview screen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <ParticipantTile
+                  trackRef={mainTrack}
+                  className={`w-full h-full ${mainTrack.source === Track.Source.ScreenShare ? 'screen-share-tile' : ''}`}
+                />
+                {isLocalScreenMain && showLocalPreview && (
+                  <div className="absolute top-3 left-3 right-16 bg-amber-500/90 backdrop-blur text-black text-xs font-medium px-3 py-1.5 rounded-lg flex items-center justify-between shadow-lg z-10">
+                    <span className="truncate mr-2">⚠️ Previewing your screen: switch to another app or tab to avoid an infinite mirror.</span>
+                    <button
+                      onClick={() => setShowLocalPreview(false)}
+                      className="bg-black/20 hover:bg-black/40 text-black px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap cursor-pointer"
+                    >
+                      Hide preview
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
             {pinnedTrack && (
               <button
                 onClick={() => onPinToggle(null)}
-                className="absolute top-3 right-3 bg-black/50 text-blue-300 hover:text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-sm"
+                className="absolute top-3 right-3 bg-black/60 text-blue-300 hover:text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-sm z-20 cursor-pointer"
               >
                 Unpin
               </button>
@@ -162,8 +251,21 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
 
   const toggleScreenShare = useCallback(async () => {
     if (!localParticipant) return;
-    try { await localParticipant.setScreenShareEnabled(!isScreenShareEnabled); }
-    catch (err) { console.error('Screen share toggle error:', err); }
+    try {
+      if (isScreenShareEnabled) {
+        await localParticipant.setScreenShareEnabled(false);
+      } else {
+        await localParticipant.setScreenShareEnabled(true, {
+          selfBrowserSurface: 'exclude',
+          surfaceSwitching: 'include',
+          systemAudio: 'include',
+        });
+      }
+    } catch (err) {
+      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        console.error('Screen share toggle error:', err);
+      }
+    }
   }, [localParticipant, isScreenShareEnabled]);
 
   // ── Fullscreen ───────────────────────────────────────────────────────────
@@ -271,6 +373,25 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
         </div>
       )}
 
+      {/* ── Screen share active banner ────────────────────────────────────── */}
+      {isScreenShareEnabled && (
+        <div className="bg-blue-600/95 text-white text-xs sm:text-sm px-4 py-2 flex items-center justify-between flex-shrink-0 z-20 border-b border-blue-500 shadow-md">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-200 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+            </span>
+            <span>You are sharing your screen with everyone</span>
+          </div>
+          <button
+            onClick={toggleScreenShare}
+            className="bg-white text-blue-700 hover:bg-blue-50 font-semibold text-xs px-3.5 py-1 rounded-full transition-colors shadow-sm active:scale-95 cursor-pointer"
+          >
+            Stop presenting
+          </button>
+        </div>
+      )}
+
       {/* ── Slim info bar (top) ───────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-2 flex-shrink-0 z-10">
         {/* Left: time + room code */}
@@ -324,6 +445,7 @@ function MeetingRoom({ roomCode, isHost, meeting, dbUser, firebaseUser, onEndMee
           <VideoLayout
             pinnedTrackId={pinnedIdentity}
             onPinToggle={handlePinByTrackId}
+            onStopScreenShare={toggleScreenShare}
           />
         </div>
 
